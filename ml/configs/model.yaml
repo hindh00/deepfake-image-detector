@@ -1,0 +1,28 @@
+# Dual-branch spatial + frequency fusion model architecture.
+
+spatial_branch:
+  backbone: vit_small_patch16_224
+  pretrained: true
+  pretrained_source: timm # ImageNet-21k weights
+  embed_dim: 384
+  freeze_backbone: false
+
+frequency_branch:
+  input: fft_magnitude_log1p # grayscale -> 2D FFT -> log1p(|.|)
+  conv_channels: [32, 64, 128, 256]
+  embed_dim: 256
+
+fusion:
+  type: concat_mlp
+  hidden_dim: 256
+  dropout: 0.2
+  num_classes: 2 # real / fake
+
+loss:
+  fused_weight: 1.0
+  spatial_aux_weight: 0.3
+  freq_aux_weight: 0.3
+
+explainability:
+  spatial_method: attention_rollout
+  frequency_method: gradient_x_input_saliency

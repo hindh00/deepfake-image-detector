@@ -1,0 +1,29 @@
+# Initial training hyperparameters.
+
+seed: 42
+image_size: 224
+
+optimizer:
+  name: adamw
+  lr: 3.0e-5
+  weight_decay: 0.01
+
+schedule:
+  name: cosine
+  warmup_steps: 500
+
+batch_size: 64
+grad_accum_steps: 1
+mixed_precision: true
+num_epochs: 10
+early_stopping_patience: 3
+
+checkpoint:
+  dir: checkpoints/
+  save_every_steps: 1000
+  resume: true
+
+logging:
+  backend: none # set to "wandb" to enable
+  log_every_steps: 50
+  canary_batch_size: 8 # fixed batch logged each epoch for qualitative sanity checks

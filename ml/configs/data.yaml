@@ -1,0 +1,46 @@
+# Dataset sources and sampling plan
+
+sources:
+  community_forensics:
+    hf_id: OwensLab/CommunityForensics-Small
+    role: train
+    generator_family: mixed
+
+  genimage:
+    hf_id: TheKernel01/Tiny-GenImage
+    role: train_val
+    generator_family: mixed # gan + diffusion, labeled per-example
+
+  genimage_pp:
+    hf_id: Lunahera/genimagepp
+    role: held_out_eval # never used for training
+    generator_family: diffusion # Flux.1 / SD3
+
+  faceforensics:
+    hf_id: bitmind/FaceForensicsC23
+    role: train_val
+    generator_family: gan_face_swap
+    media_type: video # needs frame_extraction.py
+
+  celeb_df:
+    hf_id: AlexWortega/celeb
+    role: eval
+    generator_family: gan_face_swap
+    media_type: video
+
+  synthetic_faces_hq:
+    hf_id: bitmind/SyntheticFacesHQ
+    role: train_val
+    generator_family: diffusion_face
+
+sampling:
+  train_target: 200_000
+  val_target: 20_000
+  balance: real_fake_50_50
+  stratify_by: generator_family
+
+splits:
+  train: 0.8
+  val: 0.1
+  test: 0.1
+  # held_out_eval is NOT part of this ratio - it's the genimage_pp source entirely
