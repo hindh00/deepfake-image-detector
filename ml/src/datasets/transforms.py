@@ -14,8 +14,9 @@ from torchvision import transforms as T
 IMAGE_SIZE = 224
 
 # Matches timm's ImageNet-21k pretraining stats for vit_small_patch16_224.
-_IMAGENET_MEAN = [0.485, 0.456, 0.406]
-_IMAGENET_STD = [0.229, 0.224, 0.225]
+# Public (not _-prefixed): also used to denormalize images for canary-batch visualization in train.py.
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
 
 
 def build_spatial_transform(train: bool) -> T.Compose:
@@ -26,14 +27,14 @@ def build_spatial_transform(train: bool) -> T.Compose:
                 T.RandomResizedCrop(IMAGE_SIZE, scale=(0.8, 1.0)),
                 T.RandomHorizontalFlip(),
                 T.ToTensor(),
-                T.Normalize(_IMAGENET_MEAN, _IMAGENET_STD),
+                T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
             ]
         )
     return T.Compose(
         [
             T.Resize((IMAGE_SIZE, IMAGE_SIZE)),
             T.ToTensor(),
-            T.Normalize(_IMAGENET_MEAN, _IMAGENET_STD),
+            T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ]
     )
 
