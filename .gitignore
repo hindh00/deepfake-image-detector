@@ -5,14 +5,14 @@ __pycache__/
 venv/
 *.egg-info/
 
-# ML artifacts
+# ML artifacts (scoped to ml/ so these don't also match source dirs like ml/src/datasets/)
 *.pt
 *.pth
 *.onnx
 *.ckpt
-checkpoints/
-data/
-datasets/
+ml/checkpoints/
+ml/data/
+ml/.cache/
 *.csv
 wandb/
 

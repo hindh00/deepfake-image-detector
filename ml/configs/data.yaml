@@ -22,12 +22,6 @@ sources:
     generator_family: gan_face_swap
     media_type: video # needs frame_extraction.py
 
-  celeb_df:
-    hf_id: AlexWortega/celeb
-    role: eval
-    generator_family: gan_face_swap
-    media_type: video
-
   synthetic_faces_hq:
     hf_id: bitmind/SyntheticFacesHQ
     role: train_val
