@@ -214,9 +214,14 @@ def train(
     model_cfg: dict,
     train_cfg: dict,
     checkpoint_dir: Path | None = None,
+    data_dir: Path | None = None,
     max_steps: int | None = None,
 ) -> dict:
-    """Runs training. `max_steps` caps steps per epoch - for fast sanity checks, not real runs."""
+    """Runs training. `max_steps` caps steps per epoch - for fast sanity checks, not real runs.
+
+    `data_dir` overrides where the manifest/images are read from (e.g. a Drive-mounted
+    path in Colab, matching whatever was passed to build_manifest()); defaults to ml/data.
+    """
     torch.manual_seed(train_cfg["seed"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     use_amp = train_cfg["mixed_precision"] and device.type == "cuda"
@@ -224,8 +229,11 @@ def train(
 
     model = DualBranchDetector.from_config(model_cfg).to(device)
 
-    train_ds = DeepfakeDataset(split="train")
-    val_ds = DeepfakeDataset(split="val")
+    dataset_kwargs = {}
+    if data_dir is not None:
+        dataset_kwargs = {"manifest_path": data_dir / "manifest.csv", "data_dir": data_dir}
+    train_ds = DeepfakeDataset(split="train", **dataset_kwargs)
+    val_ds = DeepfakeDataset(split="val", **dataset_kwargs)
     train_loader = DataLoader(train_ds, batch_size=train_cfg["batch_size"], shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=train_cfg["batch_size"], shuffle=False)
 

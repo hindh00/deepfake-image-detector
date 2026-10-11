@@ -34,7 +34,7 @@ MANIFEST_PATH = DATA_DIR / "manifest.csv"
 FIELDNAMES = ["path", "label", "generator_family", "source", "split"]
 
 
-def _save_and_record(samples: list[Sample], dest_dir: Path) -> list[dict]:
+def _save_and_record(samples: list[Sample], dest_dir: Path, data_dir: Path) -> list[dict]:
     dest_dir.mkdir(parents=True, exist_ok=True)
     rows = []
     for i, sample in enumerate(samples):
@@ -43,7 +43,7 @@ def _save_and_record(samples: list[Sample], dest_dir: Path) -> list[dict]:
         sample.image.save(path, format="JPEG", quality=90)
         rows.append(
             {
-                "path": str(path.relative_to(DATA_DIR)),
+                "path": str(path.relative_to(data_dir)),
                 "label": sample.label,
                 "generator_family": sample.generator_family,
                 "source": sample.source,
@@ -77,13 +77,23 @@ def build_manifest(
     train_frac: float = 0.8,
     val_frac: float = 0.1,
     seed: int = 42,
+    data_dir: Path | None = None,
 ) -> list[dict]:
-    """Builds and writes the manifest; also returns the rows written (for tests)."""
+    """Builds and writes the manifest; also returns the rows written (for tests).
+
+    `data_dir` defaults to ml/data (this repo checkout) but can point anywhere -
+    e.g. a Drive-mounted path in Colab, so images/manifest persist across sessions
+    without needing the code itself to live there too.
+    """
+    data_dir = data_dir or DATA_DIR
+    images_dir = data_dir / "images"
+    manifest_path = data_dir / "manifest.csv"
+
     pooled_rows = []
 
     for iterator in (iter_community_forensics(), iter_genimage(), iter_synthetic_faces_hq()):
         samples = list(islice(iterator, per_source_cap))
-        pooled_rows.extend(_save_and_record(samples, IMAGES_DIR))
+        pooled_rows.extend(_save_and_record(samples, images_dir, data_dir))
 
     ff_samples = list(
         islice(
@@ -91,7 +101,7 @@ def build_manifest(
             per_source_cap,
         )
     )
-    pooled_rows.extend(_save_and_record(ff_samples, IMAGES_DIR))
+    pooled_rows.extend(_save_and_record(ff_samples, images_dir, data_dir))
 
     train, val, test = _stratified_split(pooled_rows, train_frac, val_frac, seed)
     for row in train:
@@ -104,14 +114,14 @@ def build_manifest(
     held_out_samples = list(
         islice(iter_genimage_pp(max_per_config=max(1, per_source_cap // 2)), per_source_cap)
     )
-    held_out_rows = _save_and_record(held_out_samples, IMAGES_DIR)
+    held_out_rows = _save_and_record(held_out_samples, images_dir, data_dir)
     for row in held_out_rows:
         row["split"] = "held_out_eval"
 
     final_rows = train + val + test + held_out_rows
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(MANIFEST_PATH, "w", newline="") as f:
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with open(manifest_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         writer.writeheader()
         writer.writerows(final_rows)
