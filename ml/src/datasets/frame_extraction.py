@@ -1,13 +1,8 @@
 """Frame extraction for FaceForensics++ (bitmind/FaceForensicsC23).
 
-The HF-hosted zip is 17.9GB - impractical to download in full on free compute just
-to sample a training subset. Instead, this reads the zip's central directory via
+This reads the HF-hosted zip's central directory via
 HTTP range requests (confirmed the host advertises Accept-Ranges: bytes) and extracts
-only the specific video entries actually sampled - a few MB of traffic instead of 17.9GB.
-
-The zip's real internal layout is flat - FaceForensics++_C23/{real,fake}/<id>.mp4 -
-not split by manipulation method (Deepfakes/Face2Face/etc.) as the dataset card's
-prose implies.
+only the specific video entries actually sampled.
 """
 
 from __future__ import annotations

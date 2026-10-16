@@ -14,6 +14,7 @@ from __future__ import annotations
 import csv
 import random
 from collections import defaultdict
+from collections.abc import Iterable
 from itertools import islice
 from pathlib import Path
 
@@ -34,7 +35,11 @@ MANIFEST_PATH = DATA_DIR / "manifest.csv"
 FIELDNAMES = ["path", "label", "generator_family", "source", "split"]
 
 
-def _save_and_record(samples: list[Sample], dest_dir: Path, data_dir: Path) -> list[dict]:
+def _save_and_record(samples: Iterable[Sample], dest_dir: Path, data_dir: Path) -> list[dict]:
+    """Saves each sample to disk as it's produced, instead of materializing the
+    whole batch of decoded images in memory first - with per_source_cap in the
+    hundreds, holding every decoded PIL image at once is what blows up RAM on
+    memory-constrained runtimes (e.g. free-tier Colab)."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     rows = []
     for i, sample in enumerate(samples):
@@ -92,16 +97,12 @@ def build_manifest(
     pooled_rows = []
 
     for iterator in (iter_community_forensics(), iter_genimage(), iter_synthetic_faces_hq()):
-        samples = list(islice(iterator, per_source_cap))
-        pooled_rows.extend(_save_and_record(samples, images_dir, data_dir))
+        pooled_rows.extend(_save_and_record(islice(iterator, per_source_cap), images_dir, data_dir))
 
-    ff_samples = list(
-        islice(
-            iter_faceforensics_frames(max_videos_per_class=max(1, per_source_cap // 10), frames_per_video=5, seed=seed),
-            per_source_cap,
-        )
+    ff_iterator = iter_faceforensics_frames(
+        max_videos_per_class=max(1, per_source_cap // 10), frames_per_video=5, seed=seed
     )
-    pooled_rows.extend(_save_and_record(ff_samples, images_dir, data_dir))
+    pooled_rows.extend(_save_and_record(islice(ff_iterator, per_source_cap), images_dir, data_dir))
 
     train, val, test = _stratified_split(pooled_rows, train_frac, val_frac, seed)
     for row in train:
@@ -111,10 +112,8 @@ def build_manifest(
     for row in test:
         row["split"] = "test"
 
-    held_out_samples = list(
-        islice(iter_genimage_pp(max_per_config=max(1, per_source_cap // 2)), per_source_cap)
-    )
-    held_out_rows = _save_and_record(held_out_samples, images_dir, data_dir)
+    held_out_iterator = iter_genimage_pp(max_per_config=max(1, per_source_cap // 2))
+    held_out_rows = _save_and_record(islice(held_out_iterator, per_source_cap), images_dir, data_dir)
     for row in held_out_rows:
         row["split"] = "held_out_eval"
 
