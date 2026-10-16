@@ -62,17 +62,52 @@ class Sample:
     source: str
 
 
-def iter_community_forensics() -> Iterator[Sample]:
+def _label_capped(
+    rows: Iterator[dict], per_label_cap: int | None, max_scan: int | None
+) -> Iterator[dict]:
+    """Filters a raw (pre-decode) example stream down to at most `per_label_cap` REAL
+    and `per_label_cap` FAKE rows, checking `row["label"]` before any image decoding
+    happens downstream - so a skipped row never pays for a decode it won't use.
+
+    `max_scan` bounds how many raw rows this will look at before giving up, even if a
+    label's quota isn't filled yet. Needed because CommunityForensics-Small (confirmed
+    via the datasets-server API) is NOT shuffled - it's label-sorted in blocks, fake
+    for roughly its first 8500 rows and real only in the last ~1500 - so an unbounded
+    per-label scan would stream nearly the whole 5.7GB dataset just to collect a few
+    hundred real examples, which is what was spiking RAM. Without a cap this source
+    simply won't surface real examples within budget; that's fine, other sources
+    (genimage interleaves real/fake every row) and build_manifest's pool-wide rebalance
+    cover the shortfall.
+    """
+    counts = {REAL: 0, FAKE: 0}
+    for i, row in enumerate(rows):
+        if max_scan is not None and i >= max_scan:
+            return
+        label = row["label"]
+        if per_label_cap is not None:
+            if counts[label] >= per_label_cap:
+                if all(c >= per_label_cap for c in counts.values()):
+                    return
+                continue
+            counts[label] += 1
+        yield row
+
+
+def iter_community_forensics(
+    per_label_cap: int | None = None, max_scan: int | None = None
+) -> Iterator[Sample]:
     ds = load_dataset("OwensLab/CommunityForensics-Small", split="train", streaming=True)
-    for ex in ds:
+    for ex in _label_capped(ds, per_label_cap, max_scan):
         image = Image.open(io.BytesIO(ex["image_data"])).convert("RGB")
         generator_family = "real" if ex["label"] == REAL else ex["architecture"]
         yield Sample(image=image, label=ex["label"], generator_family=generator_family, source="community_forensics")
 
 
-def iter_genimage(split: str = "train") -> Iterator[Sample]:
+def iter_genimage(
+    split: str = "train", per_label_cap: int | None = None, max_scan: int | None = None
+) -> Iterator[Sample]:
     ds = load_dataset("TheKernel01/Tiny-GenImage", split=split, streaming=True)
-    for ex in ds:
+    for ex in _label_capped(ds, per_label_cap, max_scan):
         image = ex["image"].convert("RGB")
         generator_family = GENIMAGE_GENERATORS[ex["generator"]]
         yield Sample(image=image, label=ex["label"], generator_family=generator_family, source="genimage")

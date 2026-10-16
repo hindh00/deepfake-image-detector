@@ -9,13 +9,14 @@ genimage_pp is excluded from the train/val/test stratified split entirely - its 
 in configs/data.yaml is held_out_eval, so every row from it is tagged split=held_out_eval.
 
 Real/fake balance (configs/data.yaml's `balance: real_fake_50_50`) isn't a byproduct of
-source ordering - it's enforced in two places: mixed-label sources are capped per label
-(see `_take_balanced_by_label`), not by taking the first N records regardless of label,
-and the pooled rows are rebalanced one more time before the split (see
-`_balance_real_fake`) since synthetic_faces_hq is fake-only and has no real counterpart
-of its own. Skipping this lets the model collapse to always predicting fake - real
-accuracy tanks while every fake generator_family accuracy climbs to ~1.0, and overall
-val_acc still looks fine because fake is the majority class.
+source ordering - it's enforced in two places: mixed-label sources (community_forensics,
+genimage) are capped per label at the hf_sources.py level, before image decode, not by
+taking the first N records regardless of label; and the pooled rows are rebalanced one
+more time before the split (see `_balance_real_fake`) since synthetic_faces_hq is
+fake-only and has no real counterpart of its own. Skipping this lets the model collapse
+to always predicting fake - real accuracy tanks while every fake generator_family
+accuracy climbs to ~1.0, and overall val_acc still looks fine because fake is the
+majority class.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from __future__ import annotations
 import csv
 import random
 from collections import defaultdict
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from itertools import islice
 from pathlib import Path
 
@@ -66,22 +67,6 @@ def _save_and_record(samples: Iterable[Sample], dest_dir: Path, data_dir: Path) 
             }
         )
     return rows
-
-
-def _take_balanced_by_label(iterator: Iterable[Sample], per_label_cap: int) -> Iterator[Sample]:
-    """Pulls up to `per_label_cap` REAL and `per_label_cap` FAKE samples from a
-    mixed-label stream, filtering by label as it goes instead of taking the first N
-    records regardless of label - otherwise real representation is just whatever the
-    underlying shard ordering happens to give you. Stays lazy so it composes with
-    `_save_and_record`'s save-as-you-go behavior."""
-    counts = {REAL: 0, FAKE: 0}
-    for sample in iterator:
-        if counts[sample.label] >= per_label_cap:
-            if all(c >= per_label_cap for c in counts.values()):
-                break
-            continue
-        counts[sample.label] += 1
-        yield sample
 
 
 def _balance_real_fake(rows: list[dict], seed: int) -> list[dict]:
@@ -151,12 +136,20 @@ def build_manifest(
 
     pooled_rows = []
 
-    # community_forensics and genimage are mixed-label - cap per label so real isn't
-    # just whatever fraction the stream's native ordering happens to hand us.
-    for iterator in (iter_community_forensics(), iter_genimage()):
-        pooled_rows.extend(
-            _save_and_record(_take_balanced_by_label(iterator, per_source_cap), images_dir, data_dir)
-        )
+    # community_forensics and genimage are mixed-label - cap per label (before decode,
+    # inside hf_sources.py) so real isn't just whatever fraction the stream's native
+    # ordering happens to hand us. max_scan bounds the worst case: community_forensics
+    # is label-sorted (fake for its first ~8500 rows, real only in the tail), so an
+    # unbounded per-label scan would stream nearly its whole 5.7GB just for real
+    # examples. Capped scan means that source may contribute little/no real - fine,
+    # genimage interleaves real/fake every row, and the pool-wide rebalance below
+    # covers any shortfall.
+    max_scan = per_source_cap * 10
+    for iterator in (
+        iter_community_forensics(per_label_cap=per_source_cap, max_scan=max_scan),
+        iter_genimage(per_label_cap=per_source_cap, max_scan=max_scan),
+    ):
+        pooled_rows.extend(_save_and_record(iterator, images_dir, data_dir))
 
     # synthetic_faces_hq is fake-only by construction (no label to balance within it);
     # it's accounted for by the pool-wide rebalance below instead.
