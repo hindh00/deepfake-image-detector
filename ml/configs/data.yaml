@@ -28,8 +28,17 @@ sources:
     generator_family: diffusion_face
 
 sampling:
-  train_target: 200_000
-  val_target: 20_000
+  # Originally 200k/20k, but that wasn't grounded in the actual size of these 5
+  # sources - real images are the hard ceiling (fake is abundant: synthetic_faces_hq
+  # alone has ~493k). Confirmed real availability per source: genimage 14,000 (its
+  # full train split, perfectly label-balanced), community_forensics ~1,542 (its
+  # last, real-only shard), faceforensics 1,000 videos x 5 frames = 5,000. Combined
+  # ceiling is ~20,500 real, matched by an equal amount of fake after balancing -
+  # roughly ~41k total pooled rows. build_manifest's per_source_cap is set high
+  # enough (see ml/notebooks/02_colab_train.ipynb) that each source naturally
+  # exhausts its own real supply rather than being cut off early.
+  train_target: 33_000
+  val_target: 4_000
   balance: real_fake_50_50
   stratify_by: generator_family
 

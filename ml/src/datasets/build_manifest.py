@@ -119,6 +119,7 @@ def _stratified_split(rows: list[dict], train_frac: float, val_frac: float, seed
 
 def build_manifest(
     per_source_cap: int = 50,
+    held_out_cap: int = 1000,
     train_frac: float = 0.8,
     val_frac: float = 0.1,
     seed: int = 42,
@@ -129,6 +130,12 @@ def build_manifest(
     `data_dir` defaults to ml/data (this repo checkout) but can point anywhere -
     e.g. a Drive-mounted path in Colab, so images/manifest persist across sessions
     without needing the code itself to live there too.
+
+    `held_out_cap` is independent of `per_source_cap` - genimage_pp's role is a
+    generalization probe, not training volume, so it shouldn't balloon in lockstep
+    with per_source_cap (previously `per_source_cap // 2`, which at full-run scale
+    would mean downloading and decompressing tens of thousands of images from its
+    tar.zst archives just for a held-out eval slice).
     """
     data_dir = data_dir or DATA_DIR
     images_dir = data_dir / "images"
@@ -172,8 +179,8 @@ def build_manifest(
     for row in test:
         row["split"] = "test"
 
-    held_out_iterator = iter_genimage_pp(max_per_config=max(1, per_source_cap // 2))
-    held_out_rows = _save_and_record(islice(held_out_iterator, per_source_cap), images_dir, data_dir)
+    held_out_iterator = iter_genimage_pp(max_per_config=max(1, held_out_cap // 2))
+    held_out_rows = _save_and_record(islice(held_out_iterator, held_out_cap), images_dir, data_dir)
     for row in held_out_rows:
         row["split"] = "held_out_eval"
 
